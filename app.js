@@ -30,7 +30,7 @@ const moment = require('moment');
     const exchanges = [ /*"bitfinex",*/ "bitstamp", "bitmex", "cex", /*"exmo",*/ "gdax", "gemini", "kraken", /*"lykke",*/ /*"quoinex",*/ /*"coinfloor",*/
     "dsx", /*"hitbtc2",*/ "livecoin", "mixcoins", /*"tidex",*/ "itbit" ]
 
-    const symbols = [ 'BTC/USD', 'ETH/USD', 'BTC/EUR', 'BTC/GBP', 'ETH/EUR', 'ETH/GBP' ]
+    const symbols = [ 'BTC/USD', 'ETH/USD'/*, 'BTC/EUR', 'BTC/GBP', 'ETH/EUR', 'ETH/GBP'*/ ]
 
     const orderBooks = {}
 
