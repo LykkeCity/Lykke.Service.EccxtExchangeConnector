@@ -1,0 +1,21 @@
+{
+  "name": "ccxt_my",
+  "version": "1.0.0",
+  "description": "",
+  "main": "app.js",
+  "dependencies": {
+    "amqplib": "*",
+    "ansicolor": "*",
+    "as-table": "*",
+    "asciichart": "*",
+    "ccxt": "*",
+    "moment": "*",
+    "ololog": "*"
+  },
+  "devDependencies": {},
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "author": "",
+  "license": "ISC"
+}
