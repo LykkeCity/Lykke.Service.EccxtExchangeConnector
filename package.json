@@ -1,14 +1,13 @@
 {
-  "name": "ccxt_my",
+  "name": "lykke.service.eccxtexchangeconnector",
   "version": "1.0.0",
   "description": "",
   "main": "app.js",
   "dependencies": {
     "amqplib": "*",
     "ansicolor": "*",
-    "as-table": "*",
-    "asciichart": "*",
     "ccxt": "*",
+    "node-fetch": "*",
     "moment": "*",
     "ololog": "*"
   },
@@ -16,6 +15,6 @@
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1"
   },
-  "author": "",
-  "license": "ISC"
+  "author": "Lykke Corp (Lykke AG)",
+  "license": "MIT"
 }

@@ -2,24 +2,36 @@
 
 const ccxt = require ('ccxt')
 const amqp = require('amqplib/callback_api')
+//const settings = require('./Settings/settings');
 const moment = require('moment');
 
 
 
+// (async () => {
+//     var config = await settings.getSettings();
+
+//     var temp2 = 10;
+// })();
+
+
+
+
+
+
+var rabbitMqConnectionString = 'amqp://lykke.history:lykke.history@rabbit-me.lykke-me.svc.cluster.local:5672';
+var exchangeOrderBooksName = 'lykke.EccxtExchangeConnector.orderBooks';
+var exchangeTickPricesName = 'lykke.EccxtExchangeConnector.tickPrices';
+
 ;(async () => {
 
     var channel = null;
-    var queue = 'lykke.exchangeconnector.orderBooks.arbitragedetector';
-    
-    amqp.connect('amqp://lykke.history:lykke.history@rabbit-me.lykke-me.svc.cluster.local:5672', function(err, conn) {
+
+    amqp.connect(rabbitMqConnectionString, function(err, conn) {
       conn.createChannel(function(err, ch) {
         
-        ch.assertQueue(queue, { durable: true,
-            arguments: {
-                'x-dead-letter-exchange': 'lykke.arbitragedetector.exchangeconnector.orderBooks.dlx'
-            }
-        });
-        
+        ch.assertExchange(exchangeOrderBooksName);
+        //ch.assertExchange(exchangeTickPricesName);
+
         channel = ch;
 
       });
@@ -27,12 +39,11 @@ const moment = require('moment');
 
 
 
-    const exchanges = [ /*"bitfinex",*/ "bitstamp", "bitmex", "cex", /*"exmo",*/ "gdax", "gemini", "kraken", /*"lykke",*/ /*"quoinex",*/ /*"coinfloor",*/
-    "dsx", /*"hitbtc2",*/ "livecoin", "mixcoins", /*"tidex",*/ "itbit" ]
+    // const exchanges = [ /*"bitfinex",*/ "bitstamp", "bitmex", "cex", /*"exmo",*/ "gdax", "gemini", "kraken", /*"lykke",*/ /*"quoinex",*/ /*"coinfloor",*/
+    // "dsx", /*"hitbtc2",*/ "livecoin", "mixcoins", /*"tidex",*/ "itbit" ]
 
+    const exchanges = [ "bitmex" ]
     const symbols = [ 'BTC/USD', 'ETH/USD'/*, 'BTC/EUR', 'BTC/GBP', 'ETH/EUR', 'ETH/GBP'*/ ]
-
-    const orderBooks = {}
 
     await Promise.all (exchanges.map (exchangeId =>
 
@@ -73,7 +84,7 @@ const moment = require('moment');
                         console.log (orderBookJson)
 
                         if (channel)
-                            channel.sendToQueue(queue, Buffer.from(orderBookJson));
+                            channel.publish(exchangeOrderBooksName, '', new Buffer(orderBookJson));
                     }                    
 
                 }
