@@ -4,12 +4,10 @@
   "description": "",
   "main": "app.js",
   "dependencies": {
-    "amqplib": "*",
-    "ansicolor": "*",
-    "ccxt": "*",
-    "node-fetch": "*",
-    "moment": "*",
-    "ololog": "*"
+    "amqplib": "^0.5.2",
+    "ccxt": "^1.13.114",
+    "moment": "^2.22.1",
+    "node-fetch": "^2.1.2"
   },
   "devDependencies": {},
   "scripts": {

@@ -1,43 +1,34 @@
-var fetch = require('node-fetch');
+var fetch = require('node-fetch')
+var fs = require('fs')
 
+async function getSettings() {
 
-async function getSettings(url){
+    settingsUrl = process.env.SettingsUrl
 
-    process.env.SettingsUrl
-    
+    if (!settingsUrl)
+        throw "Settings is not set"
+
     try
     {
-        const response = await fetch(url);
-        const json = await response.json();
-        return json;
+        // url
+        if (settingsUrl.startsWith('http')){
+            const response = await fetch(settingsUrl)
+            const json = await response.json()
+            return json
+        }
+        // file
+        else {
+            var content = fs.readFileSync(settingsUrl, 'utf8')
+            const json = JSON.parse(content)
+            return json
+        }
     }
     catch (error)
     {
-        console.log(error);
+        console.log(error)
     }
+    
+    throw "This point can't be reached"
 }
 
-module.exports.getSettings = getSettings;
-
-
-
-
-
-
-// function _getSettings(settingsUrl) {
-
-//     settingsUrl = "https://github.com/andris9/fetch";
-
-//     if (!settingsUrl)
-//         return null;
-    
-//     if (settingsUrl.startsWith('http')){
-//         var settingsJson = fetch.fetchUrl(settingsUrl, function(error, meta, body){
-//             console.log(body.toString());
-//         });
-//     }
-
-//     return 'Ok';
-// }
-
-// module.exports = _getSettings(process.env.SettingsUrl);
+module.exports = getSettings
