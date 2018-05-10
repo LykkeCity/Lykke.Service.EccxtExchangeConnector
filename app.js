@@ -133,11 +133,20 @@ async function produceOrderBook(exchange, symbol){
     }
     orderBookObj.asks = asks
 
+    if (orderBookObj.bids.length === 0 && orderBookObj.asks.length === 0){
+        throw new ccxt.DDoSProtection()
+    }
+
     var orderBookJson = JSON.stringify(orderBookObj)
     const orderBooksExchange = settings.EccxtExchangeConnector.RabbitMq.OrderBooks
+
+    //TODO: check if it is changed, if not - don't publish
+
     channel.publish(orderBooksExchange, '', new Buffer(orderBookJson))
 
-    //console.log (moment().format("dd.MM.YYYY hh:mm:ss") + " " + orderBookObj.source + ", proxy: " + exchange.proxy)
+    if (settings.EccxtExchangeConnector.Main.Verbose){
+        console.log("%s %s %s, bids[0]: %s, asks[0]: %s, proxy: %s", moment().format("DD.MM.YYYY hh:mm:ss"), orderBookObj.source, orderBookObj.asset, orderBookObj.bids[0].price, orderBookObj.asks[0].price, exchange.proxy)
+    }
 
     return orderBookObj;
 }
