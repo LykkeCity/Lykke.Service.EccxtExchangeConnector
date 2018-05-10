@@ -7,13 +7,13 @@ async function getRabbitMqChannel(settings) {
 
     try
     {
-        const eccxt = settings.eccxtExchangeConnector
-        const rabbitMq = eccxt.rabbitMq
+        const eccxt = settings.EccxtExchangeConnector
+        const rabbitMq = eccxt.RabbitMq
     
-        const connection = await amqp.connect(rabbitMq.connectionString)
+        const connection = await amqp.connect(rabbitMq.ConnectionString)
         const channel = await connection.createChannel()
-        await channel.assertExchange(rabbitMq.orderBooksExchange)
-        await channel.assertExchange(rabbitMq.tickPricesExchange)
+        await channel.assertExchange(rabbitMq.OrderBooks, 'fanout', {durable: false})
+        await channel.assertExchange(rabbitMq.TickPrices, 'fanout', {durable: false})
     
         return channel
     }
