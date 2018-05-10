@@ -137,7 +137,7 @@ async function produceOrderBook(exchange, symbol){
     const orderBooksExchange = settings.EccxtExchangeConnector.RabbitMq.OrderBooks
     channel.publish(orderBooksExchange, '', new Buffer(orderBookJson))
 
-    console.log (moment().format("dd.MM.YYYY hh:mm:ss") + " " + orderBookObj.source + ", proxy: " + exchange.proxy)
+    //console.log (moment().format("dd.MM.YYYY hh:mm:ss") + " " + orderBookObj.source + ", proxy: " + exchange.proxy)
 
     return orderBookObj;
 }
