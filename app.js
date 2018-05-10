@@ -85,7 +85,7 @@ async function produceExchangeData(exchangeName, symbols) {
                 catch (e) {
                     if (e instanceof ccxt.DDoSProtection
                         || e instanceof ccxt.ExchangeNotAvailable
-                        || (e.message && e.message.includes('ECONNRESET'))
+                        || (e.message && (e.message.includes('ECONNRESET') || e.message.includes("limit exceeded")))
                         || (e.error && e.error === 1015)
                         || e instanceof ccxt.RequestTimeout
                         || (e.message && e.message.includes('timed out')))
@@ -95,7 +95,7 @@ async function produceExchangeData(exchangeName, symbols) {
                         exchange.proxy = proxies[currentProxy]
                     }
                     else {
-                        console.log (e)
+                        console.log("%s, %s, proxy: %s", e, exchange.id, exchange.proxy)
                         //throw e;
                     }
                 }
