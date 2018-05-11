@@ -70,7 +70,7 @@ async function produceExchangeData(exchangeName, symbols) {
 
         var availableSymbols = intersect(exchange.symbols, symbols);
         if (availableSymbols.length === 0)
-            reject(exchange + " doesn't have any symbols from config");
+            reject(exchange + " doesn't have any symbols from config")
 
         let currentProxy = 0
         var proxies = settings.EccxtExchangeConnector.Main.Proxies
@@ -115,7 +115,7 @@ async function produceOrderBook(exchange, symbol){
     var base = symbol.substring(0, symbol.indexOf('/'))
     var quote = symbol.substring(symbol.indexOf("/") + 1);
     var orderBookObj = {
-        'source': exchange.id,
+        'source': exchange.id + "(e)",
         'asset': symbol.replace("/", ""),
         'AssetPair': { 'base': base, 'quote': quote },
         'timestamp': timestamp
@@ -154,12 +154,17 @@ async function produceOrderBook(exchange, symbol){
 async function produceTickPrice(orderBook){
     //const tickPrice = await exchange.fetchTicker(symbol)
     const tickPrice = tickPriceFromOrderBook(orderBook)
+    if (!tickPrice){
+        return
+    }
     var tickPriceJson = JSON.stringify(tickPrice)
 
     const tickPricesExchange = settings.EccxtExchangeConnector.RabbitMq.TickPrices
     channel.publish(tickPricesExchange, '', new Buffer(tickPriceJson))
 
-    //return tickPrice
+    // if (settings.EccxtExchangeConnector.Main.Verbose){
+    //     console.log("%s %s %s, bid[0]: %s, ask[0]: %s", moment().format("DD.MM.YYYY hh:mm:ss"), tickPrice.source, tickPrice.asset, tickPrice.bid.price, tickPrice.ask.price)
+    // }
 }
 
 function tickPriceFromOrderBook(orderBook){
@@ -169,19 +174,22 @@ function tickPriceFromOrderBook(orderBook){
     tickPrice.timestamp = orderBook.timestamp
     let bestBid = orderBook.bids.length ? orderBook.bids[0] : undefined
     let bestAsk = orderBook.asks.length ? orderBook.asks[0] : undefined
+    if (!bestBid || !bestAsk){
+        return null
+    }
     if (bestBid) {
-        tickPrice.bid = bestBid; }
+        tickPrice.bid = bestBid }
     if (bestAsk) {
-        tickPrice.ask = bestAsk; }
+        tickPrice.ask = bestAsk }
 
-    return tickPrice;
+    return tickPrice
 }
 
 function intersect(a, b) {
-    var setA = new Set(a);
-    var setB = new Set(b);
-    var intersection = new Set([...setA].filter(x => setB.has(x)));
-    return Array.from(intersection);
+    var setA = new Set(a)
+    var setB = new Set(b)
+    var intersection = new Set([...setA].filter(x => setB.has(x)))
+    return Array.from(intersection)
 }
 
 function sleep(ms){
