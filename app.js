@@ -114,8 +114,10 @@ async function produceOrderBook(exchange, symbol){
     timestamp = timestamp.substring(0, timestamp.indexOf('.')) // cut off fractions of seconds
     var base = symbol.substring(0, symbol.indexOf('/'))
     var quote = symbol.substring(symbol.indexOf("/") + 1);
+    var suffixConfig = settings.EccxtExchangeConnector.Main.ExchangesNamesSuffix;
+    var suffix = suffixConfig ? suffixConfig : "(e)"; 
     var orderBookObj = {
-        'source': exchange.id + settings.EccxtExchangeConnector.Main.ExchangesNamesSuffix,
+        'source': exchange.id + suffix,
         'asset': symbol.replace("/", ""),
         'AssetPair': { 'base': base, 'quote': quote },
         'timestamp': timestamp
