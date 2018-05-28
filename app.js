@@ -162,9 +162,9 @@ async function produceTickPrice(orderBook){
     const tickPricesExchange = settings.EccxtExchangeConnector.RabbitMq.TickPrices
     channel.publish(tickPricesExchange, '', new Buffer(tickPriceJson))
 
-    // if (settings.EccxtExchangeConnector.Main.Verbose){
-    //     console.log("%s %s %s, bid[0]: %s, ask[0]: %s", moment().format("DD.MM.YYYY hh:mm:ss"), tickPrice.source, tickPrice.asset, tickPrice.bid.price, tickPrice.ask.price)
-    // }
+    if (settings.EccxtExchangeConnector.Main.Verbose){
+        console.log("%s %s %s, bid[0]: %s, ask[0]: %s", moment().format("DD.MM.YYYY hh:mm:ss"), tickPrice.source, tickPrice.asset, tickPrice.bid.price, tickPrice.ask.price)
+    }
 }
 
 function tickPriceFromOrderBook(orderBook){
@@ -177,10 +177,14 @@ function tickPriceFromOrderBook(orderBook){
     if (!bestBid || !bestAsk){
         return null
     }
-    if (bestBid) {
-        tickPrice.bid = bestBid }
-    if (bestAsk) {
-        tickPrice.ask = bestAsk }
+    if (bestBid && bestBid.price) {
+        tickPrice.bid = bestBid.price }
+    else {
+        tickPrice.bid = null }
+    if (bestAsk && bestAsk.price) {
+        tickPrice.ask = bestAsk.price }
+    else {
+        tickPrice.ask = null }
 
     return tickPrice
 }
