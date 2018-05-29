@@ -4,6 +4,7 @@ const express = require('express')
 const ccxt = require('ccxt')
 const getRabbitMqChannel = require('./RabbitMq/rabbitMq')
 const getSettings = require('./Settings/settings')
+const mapping = require('./Utils/symbolMapping')
 const moment = require('moment')
 const packageJson = require('./package.json')
 
@@ -60,6 +61,25 @@ async function produceExchangesData() {
     ))
 }
 
+function getAvailableSymbolsForExchange(exchange, symbols){
+    var result = []
+    
+    var assetsMapping = settings.EccxtExchangeConnector.Main.AssetsMapping
+    symbols.forEach(symbol => {
+        var exchangeHas = typeof exchange.findMarket(symbol) === "object"
+        if (exchangeHas){
+            result.push(symbol)
+        } else {
+            var exchangeHasMapped = typeof exchange.findMarket(mapping.MapAssetForward(symbol)) === "object" 
+            if (exchangeHasMapped){
+                result.push(symbol)
+            }
+        }
+    })
+
+    return result
+}
+
 async function produceExchangeData(exchangeName, symbols) {
 
     return new Promise(async (resolve, reject) => {
@@ -67,20 +87,20 @@ async function produceExchangeData(exchangeName, symbols) {
         const rateLimit = settings.EccxtExchangeConnector.Main.RateLimitInMilliseconds
         var exchange = new ccxt[exchangeName]({ rateLimit: rateLimit, enableRateLimit: true })
         await exchange.loadMarkets()
-
-        var availableSymbols = intersect(exchange.symbols, symbols);
+        
+        var availableSymbols = getAvailableSymbolsForExchange(exchange, symbols)
         if (availableSymbols.length === 0)
-            reject(exchange + " doesn't have any symbols from config")
+            return reject(exchange.id + " doesn't have any symbols from config")
 
         let currentProxy = 0
         var proxies = settings.EccxtExchangeConnector.Main.Proxies
         while (true) {
-            for (const symbol of availableSymbols){
+            for (var symbol of availableSymbols){
                 try {
+                    symbol = mapping.TryToMapSymbolForward(symbol, exchange);
                     var orderBook = await produceOrderBook(exchange, symbol);
                     await produceTickPrice(orderBook);
-                    //TODO: Change proxy if request took twice as much time as in the config
-                    var temp = 10;
+                    //TODO: Change proxy if request took twice (extract this const to config) as much time as in the config
                 }
                 catch (e) {
                     if (e instanceof ccxt.DDoSProtection
@@ -109,6 +129,8 @@ async function produceExchangeData(exchangeName, symbols) {
 // TODO: next methods must be refactored
 async function produceOrderBook(exchange, symbol){
     const orderBook = await exchange.fetchL2OrderBook(symbol)
+
+    symbol = mapping.TryToMapSymbolBackward(symbol, exchange)
 
     var timestamp = moment.utc().toISOString()
     timestamp = timestamp.substring(0, timestamp.indexOf('.')) // cut off fractions of seconds
@@ -139,18 +161,21 @@ async function produceOrderBook(exchange, symbol){
         throw new ccxt.DDoSProtection()
     }
 
-    var orderBookJson = JSON.stringify(orderBookObj)
-    const orderBooksExchange = settings.EccxtExchangeConnector.RabbitMq.OrderBooks
-
-    //TODO: check if it is changed, if not - don't publish
-
-    channel.publish(orderBooksExchange, '', new Buffer(orderBookJson))
-
+    sendToRabitMQ(settings.EccxtExchangeConnector.RabbitMq.OrderBooks, orderBookObj)
+    
     if (settings.EccxtExchangeConnector.Main.Verbose){
-        console.log("%s %s %s, bids[0]: %s, asks[0]: %s, proxy: %s", moment().format("DD.MM.YYYY hh:mm:ss"), orderBookObj.source, orderBookObj.asset, orderBookObj.bids[0].price, orderBookObj.asks[0].price, exchange.proxy)
+        console.log("OB: %s %s %s, bids[0]: %s, asks[0]: %s, proxy: %s", moment().format("DD.MM.YYYY hh:mm:ss"), orderBookObj.source, orderBookObj.asset, orderBookObj.bids[0].price, orderBookObj.asks[0].price, exchange.proxy)
     }
 
     return orderBookObj;
+}
+
+async function sendToRabitMQ(rabbitExchange, object){
+    //TODO: check if it is changed, if not - don't publish (settings in config)
+
+    var objectJson = JSON.stringify(object)
+
+    channel.publish(rabbitExchange, '', new Buffer(objectJson))
 }
 
 async function produceTickPrice(orderBook){
@@ -159,13 +184,11 @@ async function produceTickPrice(orderBook){
     if (!tickPrice){
         return
     }
-    var tickPriceJson = JSON.stringify(tickPrice)
 
-    const tickPricesExchange = settings.EccxtExchangeConnector.RabbitMq.TickPrices
-    channel.publish(tickPricesExchange, '', new Buffer(tickPriceJson))
+    sendToRabitMQ(settings.EccxtExchangeConnector.RabbitMq.TickPrices, tickPrice)
 
     if (settings.EccxtExchangeConnector.Main.Verbose){
-        console.log("%s %s %s, bid[0]: %s, ask[0]: %s", moment().format("DD.MM.YYYY hh:mm:ss"), tickPrice.source, tickPrice.asset, tickPrice.bid.price, tickPrice.ask.price)
+        console.log("TP: %s %s %s, bid[0]: %s, ask[0]: %s", moment().format("DD.MM.YYYY hh:mm:ss"), tickPrice.source, tickPrice.asset, tickPrice.bid, tickPrice.ask)
     }
 }
 
@@ -180,26 +203,17 @@ function tickPriceFromOrderBook(orderBook){
         return null
     }
     if (bestBid && bestBid.price) {
-        tickPrice.bid = bestBid.price }
+        tickPrice.bid = bestBid.price
+    }
     else {
-        tickPrice.bid = null }
+        tickPrice.bid = null
+    }
     if (bestAsk && bestAsk.price) {
-        tickPrice.ask = bestAsk.price }
+        tickPrice.ask = bestAsk.price
+    }
     else {
-        tickPrice.ask = null }
+        tickPrice.ask = null
+    }
 
     return tickPrice
-}
-
-function intersect(a, b) {
-    var setA = new Set(a)
-    var setB = new Set(b)
-    var intersection = new Set([...setA].filter(x => setB.has(x)))
-    return Array.from(intersection)
-}
-
-function sleep(ms){
-    return new Promise(resolve=>{
-        setTimeout(resolve,ms)
-    })
 }
