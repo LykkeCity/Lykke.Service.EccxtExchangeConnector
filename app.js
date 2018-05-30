@@ -146,7 +146,7 @@ async function produceOrderBook(exchange, symbol){
     var suffix = suffixConfig ? suffixConfig : "(e)"
     var source = exchange.name.replace(exchange.version, "").trim()
     var orderBookObj = {
-        'source': source,
+        'source': source + suffix,
         'asset': symbol.replace("/", ""),
         'AssetPair': { 'base': base, 'quote': quote },
         'timestamp': timestamp
