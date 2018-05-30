@@ -4,11 +4,12 @@ const express = require('express')
 const ccxt = require('ccxt')
 const getRabbitMqChannel = require('./RabbitMq/rabbitMq')
 const getSettings = require('./Settings/settings')
+const mapping = require('./Utils/symbolMapping')
 const moment = require('moment')
 const packageJson = require('./package.json')
 
-process.on('uncaughtException',  e => { console.log(e); process.exit(1) })
-process.on('unhandledRejection', e => { console.log(e); process.exit(1) })
+process.on('uncaughtException',  e => { console.log(e); /*process.exit(1)*/ })
+process.on('unhandledRejection', e => { console.log(e); /*process.exit(1)*/ })
 
 var settings
 var channel
@@ -60,27 +61,52 @@ async function produceExchangesData() {
     ))
 }
 
+function getAvailableSymbolsForExchange(exchange, symbols){
+    var result = []
+    
+    var assetsMapping = settings.EccxtExchangeConnector.Main.AssetsMapping
+    symbols.forEach(symbol => {
+        var exchangeHas = typeof exchange.findMarket(symbol) === "object"
+        if (exchangeHas){
+            result.push(symbol)
+        } else {
+            var exchangeHasMapped = typeof exchange.findMarket(mapping.MapAssetForward(symbol)) === "object" 
+            if (exchangeHasMapped){
+                result.push(symbol)
+            }
+        }
+    })
+
+    return result
+}
+
 async function produceExchangeData(exchangeName, symbols) {
 
     return new Promise(async (resolve, reject) => {
 
         const rateLimit = settings.EccxtExchangeConnector.Main.RateLimitInMilliseconds
         var exchange = new ccxt[exchangeName]({ rateLimit: rateLimit, enableRateLimit: true })
-        await exchange.loadMarkets()
 
-        var availableSymbols = intersect(exchange.symbols, symbols);
-        if (availableSymbols.length === 0)
-            reject(exchange + " doesn't have any symbols from config")
+        var availableSymbols = []
+        try{
+            await exchange.loadMarkets()
+
+            availableSymbols = getAvailableSymbolsForExchange(exchange, symbols)
+            if (availableSymbols.length === 0)
+                return reject(exchange.id + " doesn't have any symbols from config")
+        } catch (e){
+            return reject(exchange.id + " can't load markets")
+        }
 
         let currentProxy = 0
         var proxies = settings.EccxtExchangeConnector.Main.Proxies
         while (true) {
-            for (const symbol of availableSymbols){
+            for (var symbol of availableSymbols){
                 try {
+                    symbol = mapping.TryToMapSymbolForward(symbol, exchange);
                     var orderBook = await produceOrderBook(exchange, symbol);
                     await produceTickPrice(orderBook);
-                    //TODO: Change proxy if request took twice as much time as in the config
-                    var temp = 10;
+                    //TODO: Change proxy if request took twice (extract this const to config) as much time as in the config
                 }
                 catch (e) {
                     if (e instanceof ccxt.DDoSProtection
@@ -110,14 +136,17 @@ async function produceExchangeData(exchangeName, symbols) {
 async function produceOrderBook(exchange, symbol){
     const orderBook = await exchange.fetchL2OrderBook(symbol)
 
+    symbol = mapping.TryToMapSymbolBackward(symbol, exchange)
+
     var timestamp = moment.utc().toISOString()
     timestamp = timestamp.substring(0, timestamp.indexOf('.')) // cut off fractions of seconds
     var base = symbol.substring(0, symbol.indexOf('/'))
-    var quote = symbol.substring(symbol.indexOf("/") + 1);
-    var suffixConfig = settings.EccxtExchangeConnector.Main.ExchangesNamesSuffix;
-    var suffix = suffixConfig ? suffixConfig : "(e)"; 
+    var quote = symbol.substring(symbol.indexOf("/") + 1)
+    var suffixConfig = settings.EccxtExchangeConnector.Main.ExchangesNamesSuffix
+    var suffix = suffixConfig ? suffixConfig : "(e)"
+    var source = exchange.name.replace(exchange.version, "").trim()
     var orderBookObj = {
-        'source': exchange.id + suffix,
+        'source': source + suffix,
         'asset': symbol.replace("/", ""),
         'AssetPair': { 'base': base, 'quote': quote },
         'timestamp': timestamp
@@ -139,18 +168,21 @@ async function produceOrderBook(exchange, symbol){
         throw new ccxt.DDoSProtection()
     }
 
-    var orderBookJson = JSON.stringify(orderBookObj)
-    const orderBooksExchange = settings.EccxtExchangeConnector.RabbitMq.OrderBooks
-
-    //TODO: check if it is changed, if not - don't publish
-
-    channel.publish(orderBooksExchange, '', new Buffer(orderBookJson))
-
+    sendToRabitMQ(settings.EccxtExchangeConnector.RabbitMq.OrderBooks, orderBookObj)
+    
     if (settings.EccxtExchangeConnector.Main.Verbose){
-        console.log("%s %s %s, bids[0]: %s, asks[0]: %s, proxy: %s", moment().format("DD.MM.YYYY hh:mm:ss"), orderBookObj.source, orderBookObj.asset, orderBookObj.bids[0].price, orderBookObj.asks[0].price, exchange.proxy)
+        console.log("OB: %s %s %s, bids[0]: %s, asks[0]: %s, proxy: %s", moment().format("DD.MM.YYYY hh:mm:ss"), exchange.id, orderBookObj.asset, orderBookObj.bids[0].price, orderBookObj.asks[0].price, exchange.proxy)
     }
 
     return orderBookObj;
+}
+
+async function sendToRabitMQ(rabbitExchange, object){
+    //TODO: check if it is changed, if not - don't publish (settings in config)
+
+    var objectJson = JSON.stringify(object)
+
+    channel.publish(rabbitExchange, '', new Buffer(objectJson))
 }
 
 async function produceTickPrice(orderBook){
@@ -159,13 +191,11 @@ async function produceTickPrice(orderBook){
     if (!tickPrice){
         return
     }
-    var tickPriceJson = JSON.stringify(tickPrice)
 
-    const tickPricesExchange = settings.EccxtExchangeConnector.RabbitMq.TickPrices
-    channel.publish(tickPricesExchange, '', new Buffer(tickPriceJson))
+    sendToRabitMQ(settings.EccxtExchangeConnector.RabbitMq.TickPrices, tickPrice)
 
     if (settings.EccxtExchangeConnector.Main.Verbose){
-        console.log("%s %s %s, bid[0]: %s, ask[0]: %s", moment().format("DD.MM.YYYY hh:mm:ss"), tickPrice.source, tickPrice.asset, tickPrice.bid.price, tickPrice.ask.price)
+        console.log("TP: %s %s %s, bid[0]: %s, ask[0]: %s", moment().format("DD.MM.YYYY hh:mm:ss"), tickPrice.source, tickPrice.asset, tickPrice.bid, tickPrice.ask)
     }
 }
 
@@ -180,26 +210,17 @@ function tickPriceFromOrderBook(orderBook){
         return null
     }
     if (bestBid && bestBid.price) {
-        tickPrice.bid = bestBid.price }
+        tickPrice.bid = bestBid.price
+    }
     else {
-        tickPrice.bid = null }
+        tickPrice.bid = null
+    }
     if (bestAsk && bestAsk.price) {
-        tickPrice.ask = bestAsk.price }
+        tickPrice.ask = bestAsk.price
+    }
     else {
-        tickPrice.ask = null }
+        tickPrice.ask = null
+    }
 
     return tickPrice
-}
-
-function intersect(a, b) {
-    var setA = new Set(a)
-    var setB = new Set(b)
-    var intersection = new Set([...setA].filter(x => setB.has(x)))
-    return Array.from(intersection)
-}
-
-function sleep(ms){
-    return new Promise(resolve=>{
-        setTimeout(resolve,ms)
-    })
 }
