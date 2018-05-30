@@ -8,8 +8,8 @@ const mapping = require('./Utils/symbolMapping')
 const moment = require('moment')
 const packageJson = require('./package.json')
 
-process.on('uncaughtException',  e => { console.log(e); process.exit(1) })
-process.on('unhandledRejection', e => { console.log(e); process.exit(1) })
+process.on('uncaughtException',  e => { console.log(e); /*process.exit(1)*/ })
+process.on('unhandledRejection', e => { console.log(e); /*process.exit(1)*/ })
 
 var settings
 var channel
@@ -86,11 +86,17 @@ async function produceExchangeData(exchangeName, symbols) {
 
         const rateLimit = settings.EccxtExchangeConnector.Main.RateLimitInMilliseconds
         var exchange = new ccxt[exchangeName]({ rateLimit: rateLimit, enableRateLimit: true })
-        await exchange.loadMarkets()
-        
-        var availableSymbols = getAvailableSymbolsForExchange(exchange, symbols)
-        if (availableSymbols.length === 0)
-            return reject(exchange.id + " doesn't have any symbols from config")
+
+        var availableSymbols = []
+        try{
+            await exchange.loadMarkets()
+
+            availableSymbols = getAvailableSymbolsForExchange(exchange, symbols)
+            if (availableSymbols.length === 0)
+                return reject(exchange.id + " doesn't have any symbols from config")
+        } catch (e){
+            return reject(exchange.id + " can't load markets")
+        }
 
         let currentProxy = 0
         var proxies = settings.EccxtExchangeConnector.Main.Proxies
@@ -139,7 +145,7 @@ async function produceOrderBook(exchange, symbol){
     var suffixConfig = settings.EccxtExchangeConnector.Main.ExchangesNamesSuffix;
     var suffix = suffixConfig ? suffixConfig : "(e)"; 
     var orderBookObj = {
-        'source': exchange.id + suffix,
+        'source': exchange.name + suffix,
         'asset': symbol.replace("/", ""),
         'AssetPair': { 'base': base, 'quote': quote },
         'timestamp': timestamp
@@ -164,7 +170,7 @@ async function produceOrderBook(exchange, symbol){
     sendToRabitMQ(settings.EccxtExchangeConnector.RabbitMq.OrderBooks, orderBookObj)
     
     if (settings.EccxtExchangeConnector.Main.Verbose){
-        console.log("OB: %s %s %s, bids[0]: %s, asks[0]: %s, proxy: %s", moment().format("DD.MM.YYYY hh:mm:ss"), orderBookObj.source, orderBookObj.asset, orderBookObj.bids[0].price, orderBookObj.asks[0].price, exchange.proxy)
+        console.log("OB: %s %s %s, bids[0]: %s, asks[0]: %s, proxy: %s", moment().format("DD.MM.YYYY hh:mm:ss"), exchange.id, orderBookObj.asset, orderBookObj.bids[0].price, orderBookObj.asks[0].price, exchange.proxy)
     }
 
     return orderBookObj;
