@@ -112,7 +112,7 @@ async function produceExchangeData(exchangeName, symbols) {
                 }
                 catch (e) {
                     if (retryCount == proxies.length){
-                        sleep(5 * 60 * 1000)
+                        await sleep(5 * 60 * 1000)
                         retryCount = 0
                     }
 
