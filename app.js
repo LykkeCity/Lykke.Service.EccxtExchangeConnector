@@ -119,8 +119,10 @@ async function produceExchangeData(exchangeName, symbols) {
                     // change proxy in round robin style
                     currentProxy = ++currentProxy % proxies.length
                     exchange.proxy = proxies[currentProxy]
-
-                    console.log("%s, %s, proxy: %s", e, exchange.id, exchange.proxy)
+                    
+                    if (settings.EccxtExchangeConnector.Main.Verbose){
+                        console.log("%s, %s, proxy: %s", e, exchange.id, exchange.proxy)
+                    }
                 }
             }
         }
