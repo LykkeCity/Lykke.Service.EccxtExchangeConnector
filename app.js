@@ -98,6 +98,7 @@ async function produceExchangeData(exchangeName, symbols) {
             return reject(exchange.id + " can't load markets")
         }
 
+        let retryCount = 0
         let currentProxy = 0
         var proxies = settings.EccxtExchangeConnector.Main.Proxies
         while (true) {
@@ -107,23 +108,19 @@ async function produceExchangeData(exchangeName, symbols) {
                     var orderBook = await produceOrderBook(exchange, symbol);
                     await produceTickPrice(orderBook);
                     //TODO: Change proxy if request took twice (extract this const to config) as much time as in the config
+                    retryCount = 0
                 }
                 catch (e) {
-                    if (e instanceof ccxt.DDoSProtection
-                        || e instanceof ccxt.ExchangeNotAvailable
-                        || (e.message && (e.message.includes('ECONNRESET') || e.message.includes("limit exceeded")))
-                        || (e.error && e.error === 1015)
-                        || e instanceof ccxt.RequestTimeout
-                        || (e.message && e.message.includes('timed out')))
-                    {
-                        // change proxy in round robin style
-                        currentProxy = ++currentProxy % proxies.length
-                        exchange.proxy = proxies[currentProxy]
+                    if (retryCount == proxies.length){
+                        await sleep(5 * 60 * 1000)
+                        retryCount = 0
                     }
-                    else {
-                        console.log("%s, %s, proxy: %s", e, exchange.id, exchange.proxy)
-                        //throw e;
-                    }
+
+                    // change proxy in round robin style
+                    currentProxy = ++currentProxy % proxies.length
+                    exchange.proxy = proxies[currentProxy]
+
+                    console.log("%s, %s, proxy: %s", e, exchange.id, exchange.proxy)
                 }
             }
         }
@@ -223,4 +220,10 @@ function tickPriceFromOrderBook(orderBook){
     }
 
     return tickPrice
+}
+
+function sleep(ms){
+    return new Promise(resolve=>{
+        setTimeout(resolve,ms)
+    })
 }
