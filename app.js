@@ -26,7 +26,7 @@ var channel
 })();
 
 
-function startWebServer(){
+function startWebServer() {
     const response = {
         "Name": "Lykke.Service.EccxtExchangeConnector",
         "Version": packageJson.version,
@@ -61,17 +61,17 @@ async function produceExchangesData() {
     ))
 }
 
-function getAvailableSymbolsForExchange(exchange, symbols){
+function getAvailableSymbolsForExchange(exchange, symbols) {
     var result = []
     
     var assetsMapping = settings.EccxtExchangeConnector.Main.AssetsMapping
     symbols.forEach(symbol => {
         var exchangeHas = typeof exchange.findMarket(symbol) === "object"
-        if (exchangeHas){
+        if (exchangeHas) {
             result.push(symbol)
         } else {
             var exchangeHasMapped = typeof exchange.findMarket(mapping.MapAssetForward(symbol)) === "object" 
-            if (exchangeHasMapped){
+            if (exchangeHasMapped) {
                 result.push(symbol)
             }
         }
@@ -94,35 +94,35 @@ async function produceExchangeData(exchangeName, symbols) {
             availableSymbols = getAvailableSymbolsForExchange(exchange, symbols)
             if (availableSymbols.length === 0)
                 return reject(exchange.id + " doesn't have any symbols from config")
-        } catch (e){
-            return reject(exchange.id + " can't load markets")
+        } catch (e) {
+            return reject(exchange.id + " can't load markets: " + e)
         }
 
+        let retryCount = 0
         let currentProxy = 0
         var proxies = settings.EccxtExchangeConnector.Main.Proxies
         while (true) {
-            for (var symbol of availableSymbols){
+            for (var symbol of availableSymbols) {
                 try {
                     symbol = mapping.TryToMapSymbolForward(symbol, exchange);
                     var orderBook = await produceOrderBook(exchange, symbol);
                     await produceTickPrice(orderBook);
                     //TODO: Change proxy if request took twice (extract this const to config) as much time as in the config
+                    retryCount = 0
                 }
                 catch (e) {
-                    if (e instanceof ccxt.DDoSProtection
-                        || e instanceof ccxt.ExchangeNotAvailable
-                        || (e.message && (e.message.includes('ECONNRESET') || e.message.includes("limit exceeded")))
-                        || (e.error && e.error === 1015)
-                        || e instanceof ccxt.RequestTimeout
-                        || (e.message && e.message.includes('timed out')))
-                    {
-                        // change proxy in round robin style
-                        currentProxy = ++currentProxy % proxies.length
-                        exchange.proxy = proxies[currentProxy]
+                    if (retryCount == proxies.length) {
+                        console.log("%s: %s", exchange.id, e)
+                        await sleep(5 * 60 * 1000)
+                        retryCount = 0
                     }
-                    else {
-                        console.log("%s, %s, proxy: %s", e, exchange.id, exchange.proxy)
-                        //throw e;
+
+                    // change proxy in round robin style
+                    currentProxy = ++currentProxy % proxies.length
+                    exchange.proxy = proxies[currentProxy]
+                    
+                    if (settings.EccxtExchangeConnector.Main.Verbose) {
+                        console.log("%s: %s, proxy: %s", exchange.id, e, exchange.proxy)
                     }
                 }
             }
@@ -133,7 +133,7 @@ async function produceExchangeData(exchangeName, symbols) {
 }
 
 // TODO: next methods must be refactored
-async function produceOrderBook(exchange, symbol){
+async function produceOrderBook(exchange, symbol) {
     const orderBook = await exchange.fetchL2OrderBook(symbol)
 
     symbol = mapping.TryToMapSymbolBackward(symbol, exchange)
@@ -153,31 +153,31 @@ async function produceOrderBook(exchange, symbol){
     }
 
     var bids = []
-    for(const bid of orderBook.bids){
+    for(const bid of orderBook.bids) {
         bids.push({ 'price': bid[0], 'volume': bid[1] })
     }
     orderBookObj.bids = bids
 
     var asks = []
-    for(const ask of orderBook.asks){
+    for(const ask of orderBook.asks) {
         asks.push({ 'price': ask[0], 'volume': ask[1] })
     }
     orderBookObj.asks = asks
 
-    if (orderBookObj.bids.length === 0 && orderBookObj.asks.length === 0){
+    if (orderBookObj.bids.length === 0 && orderBookObj.asks.length === 0) {
         throw new ccxt.DDoSProtection()
     }
 
     sendToRabitMQ(settings.EccxtExchangeConnector.RabbitMq.OrderBooks, orderBookObj)
     
-    if (settings.EccxtExchangeConnector.Main.Verbose){
+    if (settings.EccxtExchangeConnector.Main.Verbose) {
         console.log("OB: %s %s %s, bids[0]: %s, asks[0]: %s, proxy: %s", moment().format("DD.MM.YYYY hh:mm:ss"), exchange.id, orderBookObj.asset, orderBookObj.bids[0].price, orderBookObj.asks[0].price, exchange.proxy)
     }
 
     return orderBookObj;
 }
 
-async function sendToRabitMQ(rabbitExchange, object){
+async function sendToRabitMQ(rabbitExchange, object) {
     //TODO: check if it is changed, if not - don't publish (settings in config)
 
     var objectJson = JSON.stringify(object)
@@ -185,28 +185,28 @@ async function sendToRabitMQ(rabbitExchange, object){
     channel.publish(rabbitExchange, '', new Buffer(objectJson))
 }
 
-async function produceTickPrice(orderBook){
+async function produceTickPrice(orderBook) {
     //const tickPrice = await exchange.fetchTicker(symbol)
     const tickPrice = tickPriceFromOrderBook(orderBook)
-    if (!tickPrice){
+    if (!tickPrice) {
         return
     }
 
     sendToRabitMQ(settings.EccxtExchangeConnector.RabbitMq.TickPrices, tickPrice)
 
-    if (settings.EccxtExchangeConnector.Main.Verbose){
+    if (settings.EccxtExchangeConnector.Main.Verbose) {
         console.log("TP: %s %s %s, bid[0]: %s, ask[0]: %s", moment().format("DD.MM.YYYY hh:mm:ss"), tickPrice.source, tickPrice.asset, tickPrice.bid, tickPrice.ask)
     }
 }
 
-function tickPriceFromOrderBook(orderBook){
+function tickPriceFromOrderBook(orderBook) {
     var tickPrice = {}
     tickPrice.source = orderBook.source
     tickPrice.asset = orderBook.asset
     tickPrice.timestamp = orderBook.timestamp
     let bestBid = orderBook.bids.length ? orderBook.bids[0] : undefined
     let bestAsk = orderBook.asks.length ? orderBook.asks[0] : undefined
-    if (!bestBid || !bestAsk){
+    if (!bestBid || !bestAsk) {
         return null
     }
     if (bestBid && bestBid.price) {
@@ -223,4 +223,10 @@ function tickPriceFromOrderBook(orderBook){
     }
 
     return tickPrice
+}
+
+function sleep(ms) {
+    return new Promise(resolve=>{
+        setTimeout(resolve,ms)
+    })
 }
