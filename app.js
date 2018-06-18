@@ -15,7 +15,7 @@ var settings
 var channel
 
 (async function main() {
-    console.log("Started, settingsUrl: " + process.env.SettingsUrl)
+    //console.log("Started, settingsUrl: " + process.env.SettingsUrl)
 
     settings = await getSettings()
     channel = await getRabbitMqChannel(settings)
@@ -24,7 +24,6 @@ var channel
 
     startWebServer()
 })();
-
 
 function startWebServer() {
     const response = {
@@ -112,7 +111,7 @@ async function produceExchangeData(exchangeName, symbols) {
                 }
                 catch (e) {
                     if (retryCount == proxies.length) {
-                        console.log("%s: %s", exchange.id, e)
+                        console.log("%s doesn't work, last exception: %s", exchange.id, e)
                         await sleep(5 * 60 * 1000)
                         retryCount = 0
                     }
@@ -120,10 +119,8 @@ async function produceExchangeData(exchangeName, symbols) {
                     // change proxy in round robin style
                     currentProxy = ++currentProxy % proxies.length
                     exchange.proxy = proxies[currentProxy]
-                    
-                    if (settings.EccxtExchangeConnector.Main.Verbose) {
-                        console.log("%s: %s, proxy: %s", exchange.id, e, exchange.proxy)
-                    }
+
+                    log("%s: %s, proxy: %s", exchange.id, e, exchange.proxy)
                 }
             }
         }
@@ -169,10 +166,8 @@ async function produceOrderBook(exchange, symbol) {
     }
 
     sendToRabitMQ(settings.EccxtExchangeConnector.RabbitMq.OrderBooks, orderBookObj)
-    
-    if (settings.EccxtExchangeConnector.Main.Verbose) {
-        console.log("OB: %s %s %s, bids[0]: %s, asks[0]: %s, proxy: %s", moment().format("DD.MM.YYYY hh:mm:ss"), exchange.id, orderBookObj.asset, orderBookObj.bids[0].price, orderBookObj.asks[0].price, exchange.proxy)
-    }
+
+    log("OB: %s %s %s, bids[0]: %s, asks[0]: %s, proxy: %s", moment().format("DD.MM.YYYY hh:mm:ss"), exchange.id, orderBookObj.asset, orderBookObj.bids[0].price, orderBookObj.asks[0].price, exchange.proxy)
 
     return orderBookObj;
 }
@@ -182,7 +177,13 @@ async function sendToRabitMQ(rabbitExchange, object) {
 
     var objectJson = JSON.stringify(object)
 
-    channel.publish(rabbitExchange, '', new Buffer(objectJson))
+    try{
+        if (channel)
+            channel.publish(rabbitExchange, '', new Buffer(objectJson))
+    }
+    catch(e){
+        log("Error while sending a message to rabbit: " + e)
+    }
 }
 
 async function produceTickPrice(orderBook) {
@@ -194,9 +195,7 @@ async function produceTickPrice(orderBook) {
 
     sendToRabitMQ(settings.EccxtExchangeConnector.RabbitMq.TickPrices, tickPrice)
 
-    if (settings.EccxtExchangeConnector.Main.Verbose) {
-        console.log("TP: %s %s %s, bid[0]: %s, ask[0]: %s", moment().format("DD.MM.YYYY hh:mm:ss"), tickPrice.source, tickPrice.asset, tickPrice.bid, tickPrice.ask)
-    }
+    log("TP: %s %s %s, bid[0]: %s, ask[0]: %s", moment().format("DD.MM.YYYY hh:mm:ss"), tickPrice.source, tickPrice.asset, tickPrice.bid, tickPrice.ask)
 }
 
 function tickPriceFromOrderBook(orderBook) {
@@ -225,8 +224,14 @@ function tickPriceFromOrderBook(orderBook) {
     return tickPrice
 }
 
+function log(...args) {
+    if (settings.EccxtExchangeConnector.Main.Verbose) {
+        console.log.apply(this, args);
+    }
+}
+
 function sleep(ms) {
     return new Promise(resolve=>{
-        setTimeout(resolve,ms)
+        setTimeout(resolve, ms)
     })
 }
