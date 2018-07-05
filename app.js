@@ -15,8 +15,8 @@ var settings
 var channel
 
 (async function main() {
-    console.log("Started, settingsUrl: " + process.env.SettingsUrl)
-
+    //console.log("Started, settingsUrl: " + process.env.SettingsUrl)
+    
     settings = await getSettings()
     channel = await getRabbitMqChannel(settings)
 
@@ -64,18 +64,17 @@ async function produceExchangesData() {
 function getAvailableSymbolsForExchange(exchange, symbols) {
     var result = []
     
-    var assetsMapping = settings.EccxtExchangeConnector.Main.AssetsMapping
-    symbols.forEach(symbol => {
+    for (let symbol of symbols) {
         var exchangeHas = typeof exchange.findMarket(symbol) === "object"
         if (exchangeHas) {
             result.push(symbol)
         } else {
-            var exchangeHasMapped = typeof exchange.findMarket(mapping.MapAssetForward(symbol)) === "object" 
+            var exchangeHasMapped = typeof exchange.findMarket(mapping.MapAssetForward(symbol, settings)) === "object" 
             if (exchangeHasMapped) {
                 result.push(symbol)
             }
         }
-    })
+    }
 
     return result
 }
@@ -89,6 +88,7 @@ async function produceExchangeData(exchangeName, symbols) {
 
         var availableSymbols = []
         try{
+            exchange.timeout = 30 * 1000
             await exchange.loadMarkets()
 
             availableSymbols = getAvailableSymbolsForExchange(exchange, symbols)
@@ -104,7 +104,7 @@ async function produceExchangeData(exchangeName, symbols) {
         while (true) {
             for (var symbol of availableSymbols) {
                 try {
-                    symbol = mapping.TryToMapSymbolForward(symbol, exchange);
+                    symbol = mapping.TryToMapSymbolForward(symbol, exchange, settings);
                     var orderBook = await produceOrderBook(exchange, symbol);
                     await produceTickPrice(orderBook);
                     //TODO: Change proxy if request took twice (extract this const to config) as much time as in the config
@@ -136,7 +136,7 @@ async function produceExchangeData(exchangeName, symbols) {
 async function produceOrderBook(exchange, symbol) {
     const orderBook = await exchange.fetchL2OrderBook(symbol)
 
-    symbol = mapping.TryToMapSymbolBackward(symbol, exchange)
+    symbol = mapping.TryToMapSymbolBackward(symbol, exchange, settings)
 
     var timestamp = moment.utc().toISOString()
     timestamp = timestamp.substring(0, timestamp.indexOf('.')) // cut off fractions of seconds
@@ -148,19 +148,21 @@ async function produceOrderBook(exchange, symbol) {
     var orderBookObj = {
         'source': source + suffix,
         'asset': symbol.replace("/", ""),
-        'AssetPair': { 'base': base, 'quote': quote },
+        'assetPair': { 'base': base, 'quote': quote },
         'timestamp': timestamp
     }
 
     var bids = []
     for(const bid of orderBook.bids) {
-        bids.push({ 'price': bid[0], 'volume': bid[1] })
+        if (bid[0] > 0 && bid[1] > 0)
+            bids.push({ 'price': bid[0], 'volume': bid[1] })
     }
     orderBookObj.bids = bids
 
     var asks = []
     for(const ask of orderBook.asks) {
-        asks.push({ 'price': ask[0], 'volume': ask[1] })
+        if (ask[0] > 0 && ask[1] > 0)
+            asks.push({ 'price': ask[0], 'volume': ask[1] })
     }
     orderBookObj.asks = asks
 
