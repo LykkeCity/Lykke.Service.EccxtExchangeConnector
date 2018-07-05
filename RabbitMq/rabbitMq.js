@@ -21,8 +21,6 @@ async function getRabbitMqChannel(settings) {
     {
         console.log(error)
     }
-    
-    throw "This point can't be reached"
 }
 
 module.exports = getRabbitMqChannel
