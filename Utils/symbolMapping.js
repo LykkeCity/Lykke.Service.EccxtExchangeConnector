@@ -1,12 +1,4 @@
-const getSettings = require('../Settings/settings')
-
-var settings
-
-(async function init() {
-    settings = await getSettings()
-})();
-
-function MapAssetForward(symbol){
+function MapAssetForward(symbol, settings){
     var result = symbol
 
     var base = symbol.split("/")[0]
@@ -27,7 +19,7 @@ function MapAssetForward(symbol){
     return result
 }
 
-function MapAssetBackward(symbol){
+function MapAssetBackward(symbol, settings){
     var result = symbol
 
     var base = symbol.split("/")[0]
@@ -48,16 +40,13 @@ function MapAssetBackward(symbol){
     return result
 }
 
-function TryToMapSymbolForward(symbol, exchange) {
+function TryToMapSymbolForward(symbol, exchange, settings) {
     var result = symbol
-
-    var base = symbol.split("/")[0]
-    var quote = symbol.split("/")[1]
 
     var assetsMapping = settings.EccxtExchangeConnector.Main.AssetsMapping
     for (const element of assetsMapping) {
         var exchangeHasntSymbol = typeof exchange.findMarket(symbol) !== "object";
-        var mappedSymbol = MapAssetForward(symbol)
+        var mappedSymbol = MapAssetForward(symbol, settings)
         var exchangeHasMapped = typeof exchange.findMarket(mappedSymbol) === "object"
         if (exchangeHasntSymbol && exchangeHasMapped){
             result = mappedSymbol
@@ -68,16 +57,13 @@ function TryToMapSymbolForward(symbol, exchange) {
     return result
 }
 
-function TryToMapSymbolBackward(symbol, exchange) {
+function TryToMapSymbolBackward(symbol, exchange, settings) {
     var result = symbol
-
-    var base = symbol.split("/")[0]
-    var quote = symbol.split("/")[1]
 
     var assetsMapping = settings.EccxtExchangeConnector.Main.AssetsMapping
     for (const element of assetsMapping) {
         var exchangeHasSymbol = typeof exchange.findMarket(symbol) === "object"
-        var mappedSymbol = MapAssetBackward(symbol)
+        var mappedSymbol = MapAssetBackward(symbol, settings)
         var exchangeHasntMapped = typeof exchange.findMarket(mappedSymbol) !== "object"
         if (exchangeHasSymbol && exchangeHasntMapped){
             result = mappedSymbol

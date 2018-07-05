@@ -68,7 +68,7 @@ function getAvailableSymbolsForExchange(exchange, symbols) {
         if (exchangeHas) {
             result.push(symbol)
         } else {
-            var exchangeHasMapped = typeof exchange.findMarket(mapping.MapAssetForward(symbol)) === "object" 
+            var exchangeHasMapped = typeof exchange.findMarket(mapping.MapAssetForward(symbol, settings)) === "object" 
             if (exchangeHasMapped) {
                 result.push(symbol)
             }
@@ -102,7 +102,7 @@ async function produceExchangeData(exchangeName, symbols) {
         while (true) {
             for (var symbol of availableSymbols) {
                 try {
-                    symbol = mapping.TryToMapSymbolForward(symbol, exchange);
+                    symbol = mapping.TryToMapSymbolForward(symbol, exchange, settings);
                     var orderBook = await produceOrderBook(exchange, symbol);
                     await produceTickPrice(orderBook);
                     //TODO: Change proxy if request took twice (extract this const to config) as much time as in the config
@@ -132,7 +132,7 @@ async function produceExchangeData(exchangeName, symbols) {
 async function produceOrderBook(exchange, symbol) {
     const orderBook = await exchange.fetchL2OrderBook(symbol)
 
-    symbol = mapping.TryToMapSymbolBackward(symbol, exchange)
+    symbol = mapping.TryToMapSymbolBackward(symbol, exchange, settings)
 
     var timestamp = moment.utc().toISOString()
     timestamp = timestamp.substring(0, timestamp.indexOf('.')) // cut off fractions of seconds
