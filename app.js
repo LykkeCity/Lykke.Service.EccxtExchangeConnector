@@ -88,6 +88,7 @@ async function produceExchangeData(exchangeName, symbols) {
 
         var availableSymbols = []
         try{
+            exchange.timeout = 30 * 1000
             await exchange.loadMarkets()
 
             availableSymbols = getAvailableSymbolsForExchange(exchange, symbols)
