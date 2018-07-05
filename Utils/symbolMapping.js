@@ -1,91 +1,77 @@
-const getSettings = require('../Settings/settings')
-
-var settings
-
-(async function init() {
-    settings = await getSettings()
-})();
-
-function MapAssetForward(symbol){
+function MapAssetForward(symbol, settings){
     var result = symbol
 
     var base = symbol.split("/")[0]
     var quote = symbol.split("/")[1]
 
     var assetsMapping = settings.EccxtExchangeConnector.Main.AssetsMapping
-    assetsMapping.forEach(element => {
+    for (const element of assetsMapping) {
         if (base == element.value){
             result = element.key + "/" + quote
-            return
+            break
         }
         if (quote == element.value){
             result = base + "/" + element.key
-            return
+            break
         }
-    });
+    }
 
     return result
 }
 
-function MapAssetBackward(symbol){
+function MapAssetBackward(symbol, settings){
     var result = symbol
 
     var base = symbol.split("/")[0]
     var quote = symbol.split("/")[1]
 
     var assetsMapping = settings.EccxtExchangeConnector.Main.AssetsMapping
-    assetsMapping.forEach(element => {
+    for (const element of assetsMapping) {
         if (base == element.key){
             result = element.value + "/" + quote
-            return
+            break
         }
         if (quote == element.key){
             result = base + "/" + element.value
-            return
+            break
         }
-    });
+    }
 
     return result
 }
 
-function TryToMapSymbolForward(symbol, exchange) {
-    var result = symbol;
-
-    var base = symbol.split("/")[0]
-    var quote = symbol.split("/")[1]
+function TryToMapSymbolForward(symbol, exchange, settings) {
+    var result = symbol
 
     var assetsMapping = settings.EccxtExchangeConnector.Main.AssetsMapping
-    assetsMapping.forEach(element => {
+    for (const element of assetsMapping) {
         var exchangeHasntSymbol = typeof exchange.findMarket(symbol) !== "object";
-        var mappedSymbol = MapAssetForward(symbol)
+        var mappedSymbol = MapAssetForward(symbol, settings)
         var exchangeHasMapped = typeof exchange.findMarket(mappedSymbol) === "object"
         if (exchangeHasntSymbol && exchangeHasMapped){
             result = mappedSymbol
-            return
+            break
         }
-    });
+    }
 
-    return result;
+    return result
 }
 
-function TryToMapSymbolBackward(symbol, exchange) {
-    var result = symbol;
-
-    var base = symbol.split("/")[0]
-    var quote = symbol.split("/")[1]
+function TryToMapSymbolBackward(symbol, exchange, settings) {
+    var result = symbol
 
     var assetsMapping = settings.EccxtExchangeConnector.Main.AssetsMapping
-    assetsMapping.forEach(element => {
-        var exchangeHasSymbol = typeof exchange.findMarket(symbol) === "object";
-        var mappedSymbol = MapAssetBackward(symbol)
+    for (const element of assetsMapping) {
+        var exchangeHasSymbol = typeof exchange.findMarket(symbol) === "object"
+        var mappedSymbol = MapAssetBackward(symbol, settings)
         var exchangeHasntMapped = typeof exchange.findMarket(mappedSymbol) !== "object"
         if (exchangeHasSymbol && exchangeHasntMapped){
             result = mappedSymbol
-            return
+            break
         }
-    });
+    }
 
-    return result;
+    return result
 }
 
 module.exports.MapAssetForward = MapAssetForward
