@@ -16,11 +16,11 @@ function MapAssetForward(symbol){
     for (const element of assetsMapping) {
         if (base == element.value){
             result = element.key + "/" + quote
-            return
+            break
         }
         if (quote == element.value){
             result = base + "/" + element.key
-            return
+            break
         }
     }
 
@@ -37,11 +37,11 @@ function MapAssetBackward(symbol){
     for (const element of assetsMapping) {
         if (base == element.key){
             result = element.value + "/" + quote
-            return
+            break
         }
         if (quote == element.key){
             result = base + "/" + element.value
-            return
+            break
         }
     }
 
@@ -61,7 +61,7 @@ function TryToMapSymbolForward(symbol, exchange) {
         var exchangeHasMapped = typeof exchange.findMarket(mappedSymbol) === "object"
         if (exchangeHasntSymbol && exchangeHasMapped){
             result = mappedSymbol
-            return
+            break
         }
     }
 
@@ -81,7 +81,7 @@ function TryToMapSymbolBackward(symbol, exchange) {
         var exchangeHasntMapped = typeof exchange.findMarket(mappedSymbol) !== "object"
         if (exchangeHasSymbol && exchangeHasntMapped){
             result = mappedSymbol
-            return
+            break
         }
     }
 
