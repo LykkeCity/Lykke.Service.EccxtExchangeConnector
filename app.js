@@ -15,8 +15,8 @@ var settings
 var channel
 
 (async function main() {
-    console.log("Started, settingsUrl: " + process.env.SettingsUrl)
-
+    //console.log("Started, settingsUrl: " + process.env.SettingsUrl)
+    
     settings = await getSettings()
     channel = await getRabbitMqChannel(settings)
 
@@ -64,8 +64,7 @@ async function produceExchangesData() {
 function getAvailableSymbolsForExchange(exchange, symbols) {
     var result = []
     
-    var assetsMapping = settings.EccxtExchangeConnector.Main.AssetsMapping
-    symbols.forEach(symbol => {
+    for (let symbol of symbols) {
         var exchangeHas = typeof exchange.findMarket(symbol) === "object"
         if (exchangeHas) {
             result.push(symbol)
@@ -75,7 +74,7 @@ function getAvailableSymbolsForExchange(exchange, symbols) {
                 result.push(symbol)
             }
         }
-    })
+    }
 
     return result
 }
@@ -148,19 +147,21 @@ async function produceOrderBook(exchange, symbol) {
     var orderBookObj = {
         'source': source + suffix,
         'asset': symbol.replace("/", ""),
-        'AssetPair': { 'base': base, 'quote': quote },
+        'assetPair': { 'base': base, 'quote': quote },
         'timestamp': timestamp
     }
 
     var bids = []
     for(const bid of orderBook.bids) {
-        bids.push({ 'price': bid[0], 'volume': bid[1] })
+        if (bid[0] > 0 && bid[1] > 0)
+            bids.push({ 'price': bid[0], 'volume': bid[1] })
     }
     orderBookObj.bids = bids
 
     var asks = []
     for(const ask of orderBook.asks) {
-        asks.push({ 'price': ask[0], 'volume': ask[1] })
+        if (ask[0] > 0 && ask[1] > 0)
+            asks.push({ 'price': ask[0], 'volume': ask[1] })
     }
     orderBookObj.asks = asks
 
