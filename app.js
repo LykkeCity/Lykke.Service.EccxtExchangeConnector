@@ -56,7 +56,11 @@ async function produceExchangesData() {
     const symbols = settings.EccxtExchangeConnector.Main.Symbols
 
     await Promise.all(exchanges.map (exchangeName =>
-        produceExchangeData(exchangeName, symbols)
+        {
+            for(let symbol of symbols){
+                produceExchangeData(exchangeName, [symbol])
+            }
+        }
     ))
 }
 
@@ -85,29 +89,30 @@ async function produceExchangeData(exchangeName, symbols) {
         const rateLimit = settings.EccxtExchangeConnector.Main.RateLimitInMilliseconds
         var exchange = new ccxt[exchangeName]({ rateLimit: rateLimit, enableRateLimit: true })
 
+        exchange.timeout = 30 * 1000 // exchange.loadMarkets() can take a long time
         var availableSymbols = []
         try{
-            exchange.timeout = 30 * 1000
             await exchange.loadMarkets()
 
             availableSymbols = getAvailableSymbolsForExchange(exchange, symbols)
             if (availableSymbols.length === 0)
-                return reject(exchange.id + " doesn't have any symbols from config")
+                return reject(exchange.id + " doesn't have " + symbols)
         } catch (e) {
             return reject(exchange.id + " can't load markets: " + e)
         }
+        exchange.timeout = rateLimit * 4 // if request takes more then swith to the next proxy
 
         let retryCount = 0
         let currentProxy = 0
         var proxies = settings.EccxtExchangeConnector.Main.Proxies
+        exchange.proxy = proxies[currentProxy]
         while (true) {
             for (var symbol of availableSymbols) {
                 try {
+                    retryCount += 1
                     symbol = mapping.TryToMapSymbolForward(symbol, exchange, settings);
                     var orderBook = await produceOrderBook(exchange, symbol);
                     await produceTickPrice(orderBook);
-                    //TODO: Change proxy if request took twice (extract this const to config) as much time as in the config
-                    retryCount = 0
                 }
                 catch (e) {
                     if (retryCount == proxies.length) {
