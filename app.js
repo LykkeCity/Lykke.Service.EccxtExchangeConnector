@@ -35,12 +35,12 @@ function startWebServer() {
         "IsDebug": false,
         "IssueIndicators": []
       }
-    const responseJson = JSON.stringify(response)
-
+      
     var app = express()
 
     app.get('/api/IsAlive', function (req, res) {
-       res.send(responseJson)
+        res.header("Content-Type",'application/json')
+        res.send(JSON.stringify(response, null, 4))
     })
     
     app.get('/tickPrice', async function (req, res) {
@@ -55,7 +55,9 @@ function startWebServer() {
             const assetPairMapped = mapping.TryToMapSymbolForward(assetPair, exchange, settings)
             const orderBook = await produceOrderBook(exchange, assetPairMapped)
             const tickPrice = tickPriceFromOrderBook(orderBook)
-            res.send(tickPrice)
+            
+            res.header("Content-Type",'application/json')
+            res.send(JSON.stringify(tickPrice, null, 4))
         }
      })
 
@@ -70,7 +72,9 @@ function startWebServer() {
 
             const assetPairMapped = mapping.TryToMapSymbolForward(assetPair, exchange, settings)
             const info = exchange.markets[assetPairMapped]
-            res.send(info)
+
+            res.header("Content-Type",'application/json')
+            res.send(JSON.stringify(info, null, 4))
         }
      })
 
