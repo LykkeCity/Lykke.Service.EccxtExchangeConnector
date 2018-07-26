@@ -1,4 +1,4 @@
-"use strict";
+"use strict"
 
 const express = require('express')
 const ccxt = require('ccxt')
@@ -8,11 +8,13 @@ const mapping = require('./Utils/symbolMapping')
 const moment = require('moment')
 const packageJson = require('./package.json')
 
-process.on('uncaughtException',  e => { console.log(e); /*process.exit(1)*/ })
-process.on('unhandledRejection', e => { console.log(e); /*process.exit(1)*/ })
+process.on('uncaughtException',  e => { console.log(e) /*process.exit(1)*/ })
+process.on('unhandledRejection', e => { console.log(e) /*process.exit(1)*/ })
 
 var settings
 var channel
+
+var exchanges = {};
 
 (async function main() {
     //console.log("Started, settingsUrl: " + process.env.SettingsUrl)
@@ -35,12 +37,43 @@ function startWebServer() {
       }
     const responseJson = JSON.stringify(response)
 
-    var app = express();
+    var app = express()
 
     app.get('/api/IsAlive', function (req, res) {
-       res.send(responseJson);
+       res.send(responseJson)
     })
     
+    app.get('/tickPrice', async function (req, res) {
+        const exchangeName = req.param('exchange')
+        const assetPair = req.param('assetPair')
+
+        if (!exchangeName || !assetPair || !exchanges || !exchanges[exchangeName])
+            res.status(404).send('Not found')
+        else {
+            const exchange = exchanges[exchangeName]
+
+            const assetPairMapped = mapping.TryToMapSymbolForward(assetPair, exchange, settings)
+            const orderBook = await produceOrderBook(exchange, assetPairMapped)
+            const tickPrice = tickPriceFromOrderBook(orderBook)
+            res.send(tickPrice)
+        }
+     })
+
+     app.get('/marketInfo', async function (req, res) {
+        const exchangeName = req.param('exchange')
+        const assetPair = req.param('assetPair')
+
+        if (!exchangeName || !assetPair || !exchanges || !exchanges[exchangeName])
+            res.status(404).send('Not found')
+        else {
+            const exchange = exchanges[exchangeName]
+
+            const assetPairMapped = mapping.TryToMapSymbolForward(assetPair, exchange, settings)
+            const info = exchange.markets[assetPairMapped]
+            res.send(info)
+        }
+     })
+
     var server = app.listen(5000, function () {
        var host = server.address().address
        var port = server.address().port
@@ -85,6 +118,9 @@ async function produceExchangeData(exchangeName, symbols) {
         const rateLimit = settings.EccxtExchangeConnector.Main.RateLimitInMilliseconds
         var exchange = new ccxt[exchangeName]({ rateLimit: rateLimit, enableRateLimit: true })
 
+        if (!exchanges[exchangeName])
+            exchanges[exchangeName] = exchange
+
         var availableSymbols = []
         try{
             exchange.timeout = 30 * 1000
@@ -103,9 +139,9 @@ async function produceExchangeData(exchangeName, symbols) {
         while (true) {
             for (var symbol of availableSymbols) {
                 try {
-                    symbol = mapping.TryToMapSymbolForward(symbol, exchange, settings);
-                    var orderBook = await produceOrderBook(exchange, symbol);
-                    await produceTickPrice(orderBook);
+                    symbol = mapping.TryToMapSymbolForward(symbol, exchange, settings)
+                    var orderBook = await produceOrderBook(exchange, symbol)
+                    await produceTickPrice(orderBook)
                     //TODO: Change proxy if request took twice (extract this const to config) as much time as in the config
                     retryCount = 0
                 }
@@ -171,7 +207,7 @@ async function produceOrderBook(exchange, symbol) {
 
     log("OB: %s %s %s, bids[0]: %s, asks[0]: %s, proxy: %s", moment().format("DD.MM.YYYY hh:mm:ss"), exchange.id, orderBookObj.asset, orderBookObj.bids[0].price, orderBookObj.asks[0].price, exchange.proxy)
 
-    return orderBookObj;
+    return orderBookObj
 }
 
 async function sendToRabitMQ(rabbitExchange, object) {
@@ -228,7 +264,7 @@ function tickPriceFromOrderBook(orderBook) {
 
 function log(...args) {
     if (settings.EccxtExchangeConnector.Main.Verbose) {
-        console.log.apply(this, args);
+        console.log.apply(this, args)
     }
 }
 
