@@ -52,7 +52,6 @@ function startWebServer() {
         else {
             const exchange = exchanges[exchangeName]
 
-            const assetPairMapped = mapping.TryToMapSymbolForward(assetPair, exchange, settings)
             const orderBook = await produceOrderBook(exchange, assetPairMapped)
             const tickPrice = tickPriceFromOrderBook(orderBook)
             
@@ -143,7 +142,6 @@ async function produceExchangeData(exchangeName, symbols) {
         while (true) {
             for (var symbol of availableSymbols) {
                 try {
-                    symbol = mapping.TryToMapSymbolForward(symbol, exchange, settings)
                     var orderBook = await produceOrderBook(exchange, symbol)
                     await produceTickPrice(orderBook)
                     //TODO: Change proxy if request took twice (extract this const to config) as much time as in the config
@@ -171,8 +169,8 @@ async function produceExchangeData(exchangeName, symbols) {
 
 // TODO: next methods must be refactored
 async function produceOrderBook(exchange, symbol) {
+    symbol = mapping.TryToMapSymbolForward(symbol, exchange, settings)
     const orderBook = await exchange.fetchL2OrderBook(symbol)
-
     symbol = mapping.TryToMapSymbolBackward(symbol, exchange, settings)
 
     var timestamp = moment.utc().toISOString()
