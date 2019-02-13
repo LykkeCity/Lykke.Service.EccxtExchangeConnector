@@ -12,8 +12,8 @@ async function getRabbitMqChannel(settings) {
     
         const connection = await amqp.connect(rabbitMq.ConnectionString)
         const channel = await connection.createChannel()
-        await channel.assertExchange(rabbitMq.OrderBooks, 'fanout', {durable: false})
-        await channel.assertExchange(rabbitMq.TickPrices, 'fanout', {durable: false})
+        await channel.assertExchange(rabbitMq.OrderBooks, 'fanout', {durable: true})
+        await channel.assertExchange(rabbitMq.TickPrices, 'fanout', {durable: true})
     
         return channel
     }
