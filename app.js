@@ -119,13 +119,12 @@ async function produceExchangeData(exchangeName, symbols) {
     return new Promise(async (resolve, reject) => {
 
         const rateLimit = settings.EccxtExchangeConnector.Main.RateLimitInMilliseconds
-
         
         let exchange
         try{
             exchange = new ccxt[exchangeName]({ rateLimit: rateLimit, enableRateLimit: true })
         } catch (e) {
-            return reject("can't find constructor for " + exchangeName)
+            return reject("Can't find constructor for " + exchangeName + ". Check exchange name.")
         }
 
         if (!exchanges[exchangeName])
