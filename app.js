@@ -120,8 +120,13 @@ async function produceExchangeData(exchangeName, symbols) {
 
         const rateLimit = settings.EccxtExchangeConnector.Main.RateLimitInMilliseconds
 
-        console.log("creating '%s'...", exchangeName)
-        var exchange = new ccxt[exchangeName]({ rateLimit: rateLimit, enableRateLimit: true })
+        
+        let exchange
+        try{
+            exchange = new ccxt[exchangeName]({ rateLimit: rateLimit, enableRateLimit: true })
+        } catch (e) {
+            return reject("can't find constructor for " + exchangeName)
+        }
 
         if (!exchanges[exchangeName])
             exchanges[exchangeName] = exchange
