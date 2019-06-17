@@ -119,6 +119,8 @@ async function produceExchangeData(exchangeName, symbols) {
     return new Promise(async (resolve, reject) => {
 
         const rateLimit = settings.EccxtExchangeConnector.Main.RateLimitInMilliseconds
+
+        console.log("creating '%s'...", exchangeName)
         var exchange = new ccxt[exchangeName]({ rateLimit: rateLimit, enableRateLimit: true })
 
         if (!exchanges[exchangeName])
