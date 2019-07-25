@@ -7,6 +7,7 @@ const getSettings = require('./Settings/settings')
 const mapping = require('./Utils/symbolMapping')
 const moment = require('moment')
 const packageJson = require('./package.json')
+const sendToSlack = require('./Utils/slack')
 
 process.on('uncaughtException',  e => { console.log(e) /*process.exit(1)*/ })
 process.on('unhandledRejection', e => { console.log(e) /*process.exit(1)*/ })
@@ -15,6 +16,7 @@ var settings
 var channel
 
 var exchanges = {};
+var exchangeLastUpdate = new Map();
 
 (async function main() {
     //console.log("Started, settingsUrl: " + process.env.SettingsUrl)
@@ -24,68 +26,10 @@ var exchanges = {};
 
     produceExchangesData()
 
+    monitorStaleExchanges()
+
     startWebServer()
 })();
-
-function startWebServer() {
-    const response = {
-        "Name": "Lykke.Service.EccxtExchangeConnector",
-        "Version": packageJson.version,
-        "Env": null,
-        "IsDebug": false,
-        "IssueIndicators": []
-      }
-      
-    var app = express()
-
-    app.get('/api/IsAlive', function (req, res) {
-        res.header("Content-Type",'application/json')
-        res.send(JSON.stringify(response, null, 4))
-    })
-    
-    app.get('/tickPrice', async function (req, res) {
-        const exchangeName = req.param('exchange')
-        const assetPair = req.param('assetPair')
-
-        if (!exchangeName || !assetPair || !exchanges || !exchanges[exchangeName])
-            res.status(404).send('Not found')
-        else {
-            const exchange = exchanges[exchangeName]
-
-            const orderBook = await produceOrderBook(exchange, assetPairMapped)
-            const tickPrice = tickPriceFromOrderBook(orderBook)
-            
-            res.header("Content-Type",'application/json')
-            res.send(JSON.stringify(tickPrice, null, 4))
-        }
-     })
-
-     app.get('/marketInfo', async function (req, res) {
-        const exchangeName = req.param('exchange')
-        const assetPair = req.param('assetPair')
-
-        if (!exchangeName || !assetPair || !exchanges || !exchanges[exchangeName])
-            res.status(404).send('Not found')
-        else {
-            const exchange = exchanges[exchangeName]
-
-            const assetPairMapped = mapping.TryToMapSymbolForward(assetPair, exchange, settings)
-            const info = exchange.markets[assetPairMapped]
-
-            res.header("Content-Type",'application/json')
-            res.send(JSON.stringify(info, null, 4))
-        }
-     })
-
-    var server = app.listen(5000, function () {
-       var host = server.address().address
-       var port = server.address().port
-
-       if (host === "::") { 
-           host = "localhost" }
-       console.log("Listening at http://%s:%s", host, port)
-    })
-}
 
 async function produceExchangesData() {
     const exchanges = settings.EccxtExchangeConnector.Main.Exchanges
@@ -94,24 +38,6 @@ async function produceExchangesData() {
     await Promise.all(exchanges.map (exchangeName =>
         produceExchangeData(exchangeName, symbols)
     ))
-}
-
-function getAvailableSymbolsForExchange(exchange, symbols) {
-    var result = []
-    
-    for (let symbol of symbols) {
-        var exchangeHas = typeof exchange.findMarket(symbol) === "object"
-        if (exchangeHas) {
-            result.push(symbol)
-        } else {
-            var exchangeHasMapped = typeof exchange.findMarket(mapping.MapAssetForward(symbol, settings)) === "object" 
-            if (exchangeHasMapped) {
-                result.push(symbol)
-            }
-        }
-    }
-
-    return result
 }
 
 async function produceExchangeData(exchangeName, symbols) {
@@ -132,7 +58,7 @@ async function produceExchangeData(exchangeName, symbols) {
 
         var availableSymbols = []
         try{
-            exchange.timeout = 30 * 1000
+            exchange.timeout = 30 * 1000 // 30 sec
             await exchange.loadMarkets()
 
             availableSymbols = getAvailableSymbolsForExchange(exchange, symbols)
@@ -150,13 +76,14 @@ async function produceExchangeData(exchangeName, symbols) {
                 try {
                     var orderBook = await produceOrderBook(exchange, symbol)
                     await produceTickPrice(orderBook)
-                    //TODO: Change proxy if request took twice (extract this const to config) as much time as in the config
+                    //TODO: Change proxy if request took twice as much time as in the config (extract this const to config)
                     retryCount = 0
+                    exchangeLastUpdate.set(exchangeName, moment.utc())
                 }
                 catch (e) {
                     if (retryCount == proxies.length) {
                         console.log("%s doesn't work, last exception: %s", exchange.id, e)
-                        await sleep(5 * 60 * 1000)
+                        await sleep(5 * 60 * 1000) // 5 minutes
                         retryCount = 0
                     }
 
@@ -168,9 +95,7 @@ async function produceExchangeData(exchangeName, symbols) {
                 }
             }
         }
-
     });
-
 }
 
 // TODO: next methods must be refactored
@@ -270,6 +195,24 @@ function tickPriceFromOrderBook(orderBook) {
     return tickPrice
 }
 
+function getAvailableSymbolsForExchange(exchange, symbols) {
+    var result = []
+    
+    for (let symbol of symbols) {
+        var exchangeHas = typeof exchange.findMarket(symbol) === "object"
+        if (exchangeHas) {
+            result.push(symbol)
+        } else {
+            var exchangeHasMapped = typeof exchange.findMarket(mapping.MapAssetForward(symbol, settings)) === "object" 
+            if (exchangeHasMapped) {
+                result.push(symbol)
+            }
+        }
+    }
+
+    return result
+}
+
 function log(...args) {
     if (settings.EccxtExchangeConnector.Main.Verbose) {
         console.log.apply(this, args)
@@ -279,5 +222,109 @@ function log(...args) {
 function sleep(ms) {
     return new Promise(resolve=>{
         setTimeout(resolve, ms)
+    })
+}
+
+async function monitorStaleExchanges() {
+
+    let exchanges = settings.EccxtExchangeConnector.Main.Exchanges
+    let lines = []
+
+    while (true) {
+        for (let exchangeName of exchanges) {
+            try {
+                let message = checkThatExchangeDataIsNotStale(exchangeName)
+                if (message)
+                    lines.push(message)
+            }
+            catch (e) {
+                log("%s: %s, proxy: %s", exchange.id, e, exchange.proxy)
+                sendToSlack(["`" + exchangeName + "` LyCI price feed - something went wrong"], settings)
+            }
+        }
+        if (lines.length > 0) {
+            lines.splice(0, 0, moment.utc().format("HH:mm"));
+            await sendToSlack(lines, settings)
+        }
+
+        await sleep(60 * 1000 * settings.EccxtExchangeConnector.Main.StaleDataMonitoring.CheckIntervalInMinutes)
+    }
+}
+
+function checkThatExchangeDataIsNotStale(exchangeName) {
+    if (!exchangeLastUpdate.has(exchangeName))
+        return
+
+    let lastUpdate = exchangeLastUpdate.get(exchangeName)
+    let sinceLastUpdateInMinutes = moment.utc().diff(lastUpdate, 'minutes')
+    let warningThresholdInMinutes = settings.EccxtExchangeConnector.Main.StaleDataMonitoring.WarningThresholdInMinutes
+
+    if (sinceLastUpdateInMinutes >= warningThresholdInMinutes){
+        let properExchangeName = exchangeName.charAt(0).toUpperCase() + exchangeName.slice(1)
+        let text = "`" + properExchangeName + "` LyCI price feed updated at " + lastUpdate.format("HH:mm") + ", " + 
+                    sinceLastUpdateInMinutes + " min ago"
+        return text
+    }
+}
+
+// Web Server -------------------------------------------
+
+function startWebServer() {
+    const response = {
+        "Name": "Lykke.Service.EccxtExchangeConnector",
+        "Version": packageJson.version,
+        "Env": null,
+        "IsDebug": false,
+        "IssueIndicators": []
+      }
+      
+    var app = express()
+
+    app.get('/api/IsAlive', function (req, res) {
+        res.header("Content-Type",'application/json')
+        res.send(JSON.stringify(response, null, 4))
+    })
+    
+    app.get('/tickPrice', async function (req, res) {
+        const exchangeName = req.param('exchange')
+        const assetPair = req.param('assetPair')
+
+        if (!exchangeName || !assetPair || !exchanges || !exchanges[exchangeName])
+            res.status(404).send('Not found')
+        else {
+            const exchange = exchanges[exchangeName]
+
+            const orderBook = await produceOrderBook(exchange, assetPairMapped)
+            const tickPrice = tickPriceFromOrderBook(orderBook)
+            
+            res.header("Content-Type",'application/json')
+            res.send(JSON.stringify(tickPrice, null, 4))
+        }
+     })
+
+     app.get('/marketInfo', async function (req, res) {
+        const exchangeName = req.param('exchange')
+        const assetPair = req.param('assetPair')
+
+        if (!exchangeName || !assetPair || !exchanges || !exchanges[exchangeName])
+            res.status(404).send('Not found')
+        else {
+            const exchange = exchanges[exchangeName]
+
+            const assetPairMapped = mapping.TryToMapSymbolForward(assetPair, exchange, settings)
+            const info = exchange.markets[assetPairMapped]
+
+            res.header("Content-Type",'application/json')
+            res.send(JSON.stringify(info, null, 4))
+        }
+     })
+
+    var server = app.listen(5000, function () {
+       var host = server.address().address
+       var port = server.address().port
+
+       if (host === "::") { 
+           host = "localhost" }
+       console.log("Listening at http://%s:%s", host, port)
     })
 }
