@@ -228,9 +228,10 @@ function sleep(ms) {
 async function monitorStaleExchanges() {
 
     let exchanges = settings.EccxtExchangeConnector.Main.Exchanges
-    let lines = []
 
     while (true) {
+        let lines = []
+
         for (let exchangeName of exchanges) {
             try {
                 let message = checkThatExchangeDataIsNotStale(exchangeName)
@@ -245,7 +246,6 @@ async function monitorStaleExchanges() {
         if (lines.length > 0) {
             lines.splice(0, 0, moment.utc().format("HH:mm"));
             await sendToSlack(lines, settings)
-            lines = []
         }
 
         await sleep(60 * 1000 * settings.EccxtExchangeConnector.Main.StaleDataMonitoring.CheckIntervalInMinutes)
