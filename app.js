@@ -245,6 +245,7 @@ async function monitorStaleExchanges() {
         if (lines.length > 0) {
             lines.splice(0, 0, moment.utc().format("HH:mm"));
             await sendToSlack(lines, settings)
+            lines = []
         }
 
         await sleep(60 * 1000 * settings.EccxtExchangeConnector.Main.StaleDataMonitoring.CheckIntervalInMinutes)
