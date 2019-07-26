@@ -26,7 +26,8 @@ var monitoringUpdates = new Map(); // [exchage, [asset pair, timestamp]]
 
     produceExchangesData()
 
-    monitorStaleExchanges()
+    if (settings.EccxtExchangeConnector.Main.StaleDataMonitoring.Enabled)
+        monitorStaleExchanges()
 
     startWebServer()
 })();
