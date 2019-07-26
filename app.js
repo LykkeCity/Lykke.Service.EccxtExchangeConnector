@@ -16,7 +16,7 @@ var settings
 var channel
 
 var exchanges = {};
-var exchangeLastUpdate = new Map();
+var monitoringUpdates = new Map(); // [exchage, [asset pair, timestamp]]
 
 (async function main() {
     //console.log("Started, settingsUrl: " + process.env.SettingsUrl)
@@ -78,7 +78,7 @@ async function produceExchangeData(exchangeName, symbols) {
                     await produceTickPrice(orderBook)
                     //TODO: Change proxy if request took twice as much time as in the config (extract this const to config)
                     retryCount = 0
-                    exchangeLastUpdate.set(exchangeName, moment.utc())
+                    updateMonitoring(exchangeName, symbol)
                 }
                 catch (e) {
                     if (retryCount == proxies.length) {
@@ -239,8 +239,8 @@ async function monitorStaleExchanges() {
                     lines.push(message)
             }
             catch (e) {
-                log("%s: %s, proxy: %s", exchange.id, e, exchange.proxy)
-                sendToSlack(["`" + exchangeName + "` LyCI price feed - something went wrong"], settings)
+                log("%s: %s", exchangeName, e)
+                lines.push("`" + exchangeName + "` LyCI price feed - something went wrong")
             }
         }
         if (lines.length > 0) {
@@ -253,19 +253,37 @@ async function monitorStaleExchanges() {
 }
 
 function checkThatExchangeDataIsNotStale(exchangeName) {
-    if (!exchangeLastUpdate.has(exchangeName))
+    if (!monitoringUpdates.has(exchangeName))
         return
 
-    let lastUpdate = exchangeLastUpdate.get(exchangeName)
+    let assetPairTimestampMap = monitoringUpdates.get(exchangeName)
+    if (assetPairTimestampMap.length == 0)
+        return
+
+    let timestamps = assetPairTimestampMap.values()
+    let lastUpdate = new moment(Math.max(...timestamps))
+
     let sinceLastUpdateInMinutes = moment.utc().diff(lastUpdate, 'minutes')
     let warningThresholdInMinutes = settings.EccxtExchangeConnector.Main.StaleDataMonitoring.WarningThresholdInMinutes
 
     if (sinceLastUpdateInMinutes >= warningThresholdInMinutes){
-        let properExchangeName = exchangeName.charAt(0).toUpperCase() + exchangeName.slice(1)
-        let text = "`" + properExchangeName + "` LyCI price feed updated at " + lastUpdate.format("HH:mm") + ", " + 
+        let text = "`" + exchangeName + "` LyCI price feed updated at " + lastUpdate.format("HH:mm") + ", " + 
                     sinceLastUpdateInMinutes + " min ago"
         return text
     }
+}
+
+function updateMonitoring(exchangeName, symbol){
+    let assetPairTimestampMap
+    
+    if (monitoringUpdates.has(exchangeName))
+        assetPairTimestampMap = monitoringUpdates.get(exchangeName)
+    else
+        assetPairTimestampMap = new Map()
+
+    assetPairTimestampMap.set(symbol, moment.utc())
+
+    monitoringUpdates.set(exchangeName, assetPairTimestampMap)
 }
 
 // Web Server -------------------------------------------
