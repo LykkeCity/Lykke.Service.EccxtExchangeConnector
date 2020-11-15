@@ -105,6 +105,10 @@ async function produceOrderBook(exchange, symbol) {
     const orderBook = await exchange.fetchL2OrderBook(symbol)
     symbol = mapping.TryToMapSymbolBackward(symbol, exchange, settings)
 
+    if (symbol === 'BCHN/USD') {
+        symbol = "BCH/USD"
+    }
+
     var timestamp = moment.utc().toISOString()
     timestamp = timestamp.substring(0, timestamp.indexOf('.')) // cut off fractions of seconds
     var base = symbol.substring(0, symbol.indexOf('/'))
